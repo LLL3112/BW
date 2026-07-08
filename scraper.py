@@ -69,8 +69,12 @@ def scrape_category(path):
         if resp.status_code != 200:
             print(f"Status {resp.status_code} za {url}")
             break
-        soup = BeautifulSoup(resp.text, "lxml")
+soup = BeautifulSoup(resp.text, "lxml")
         cards = soup.select(".product-item")
+        print(f"STATUS: {resp.status_code}, DUZINA HTML: {len(resp.text)}, BROJ .product-item: {len(cards)}")
+        if page == 1:
+            print("PRVIH 3000 KARAKTERA HTML-a:")
+            print(resp.text[:3000])
         if not cards:
             break
         for card in cards:
