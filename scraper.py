@@ -66,17 +66,23 @@ def scrape_category(path):
         except Exception as e:
             print(f"Greska pri ucitavanju {url}: {e}")
             break
-        if resp.status_code != 200:
-            print(f"Status {resp.status_code} za {url}")
-            break
-soup = BeautifulSoup(resp.text, "lxml")
-        cards = soup.select(".product-item")
-        print(f"STATUS: {resp.status_code}, DUZINA HTML: {len(resp.text)}, BROJ .product-item: {len(cards)}")
+
+        cards_check = BeautifulSoup(resp.text, "lxml").select(".product-item")
+        print(f"STATUS: {resp.status_code}, DUZINA HTML: {len(resp.text)}, BROJ .product-item: {len(cards_check)}")
+
         if page == 1:
             print("PRVIH 3000 KARAKTERA HTML-a:")
             print(resp.text[:3000])
+
+        if resp.status_code != 200:
+            print(f"Status {resp.status_code} za {url}")
+            break
+
+        soup = BeautifulSoup(resp.text, "lxml")
+        cards = soup.select(".product-item")
         if not cards:
             break
+
         for card in cards:
             listings.append(parse_listing_card(card))
         page += 1
