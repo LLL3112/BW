@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Belgrade Waterfront — Listings Dashboard</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+<div class="app-shell viz-root">
+
+  <header class="topbar">
+    <div class="topbar-left">
+      <h1>Belgrade Waterfront <span class="muted">/ Beograd na vodi</span></h1>
+      <div id="meta-line" class="muted small">Loading data…</div>
+    </div>
+    <div class="topbar-right">
+      <button id="theme-toggle" class="btn ghost" title="Toggle theme">🌓</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="overview">Overview</button>
+    <button class="tab-btn" data-tab="listings">Listings</button>
+    <button class="tab-btn" data-tab="layouts">By Layout</button>
+    <button class="tab-btn" data-tab="duplicates">Duplicates</button>
+    <button class="tab-btn" data-tab="agencies">Agencies &amp; Buildings</button>
+    <button class="tab-btn" data-tab="activity">New / Removed</button>
+    <button class="tab-btn" data-tab="roi">Yield &amp; ROI Calculator</button>
+  </nav>
+
+  <main>
+
+    <!-- OVERVIEW -->
+    <section class="tab-panel active" id="panel-overview">
+      <div class="kpi-row" id="kpi-row"></div>
+      <div class="chart-grid">
+        <div class="card">
+          <h3>Active sale listings by layout</h3>
+          <canvas id="chart-layout-count"></canvas>
+        </div>
+        <div class="card">
+          <h3>Median price / m² by layout</h3>
+          <canvas id="chart-layout-psqm"></canvas>
+        </div>
+        <div class="card">
+          <h3>Owner vs. agency listings</h3>
+          <canvas id="chart-owner-agency"></canvas>
+        </div>
+        <div class="card">
+          <h3>Off-plan vs. resale</h3>
+          <canvas id="chart-offplan"></canvas>
+        </div>
+        <div class="card wide">
+          <h3>New listings published per day</h3>
+          <canvas id="chart-daily-new"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- LISTINGS TABLE -->
+    <section class="tab-panel" id="panel-listings">
+      <div class="filters-bar" id="filters-bar"></div>
+      <div class="table-toolbar">
+        <div id="listings-count" class="muted small"></div>
+        <div class="toolbar-actions">
+          <button class="btn" id="export-csv">Export CSV</button>
+          <button class="btn" id="export-xlsx">Export Excel</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="listings-table">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="pager" id="pager"></div>
+    </section>
+
+    <!-- BY LAYOUT -->
+    <section class="tab-panel" id="panel-layouts">
+      <div class="card wide">
+        <h3>Grouped by layout (studio, 1-bedroom, 2-bedroom, …)</h3>
+        <div id="layout-groups"></div>
+      </div>
+    </section>
+
+    <!-- DUPLICATES -->
+    <section class="tab-panel" id="panel-duplicates">
+      <div class="card wide">
+        <h3>Likely duplicate listings <span class="muted small">(same apartment advertised by multiple agencies/owners)</span></h3>
+        <div id="duplicates-list"></div>
+      </div>
+    </section>
+
+    <!-- AGENCIES & BUILDINGS -->
+    <section class="tab-panel" id="panel-agencies">
+      <div class="chart-grid">
+        <div class="card wide">
+          <h3>Top agency per BW section / building</h3>
+          <div id="agency-leaderboard"></div>
+        </div>
+        <div class="card wide">
+          <h3>Listings by building</h3>
+          <canvas id="chart-buildings"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ACTIVITY -->
+    <section class="tab-panel" id="panel-activity">
+      <div class="chart-grid">
+        <div class="card">
+          <h3>New today <span id="new-today-count" class="muted small"></span></h3>
+          <div id="new-today-list" class="mini-list"></div>
+        </div>
+        <div class="card">
+          <h3>Removed vs. 7 days ago <span id="removed-count" class="muted small"></span></h3>
+          <div id="removed-list" class="mini-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ROI CALCULATOR -->
+    <section class="tab-panel" id="panel-roi">
+      <div class="card wide">
+        <h3>Yield &amp; ROI assumptions</h3>
+        <div class="roi-controls" id="roi-controls"></div>
+      </div>
+      <div class="table-toolbar">
+        <div id="roi-count" class="muted small"></div>
+        <div class="toolbar-actions">
+          <button class="btn" id="export-roi-csv">Export CSV</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="roi-table">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="foot muted small">
+    Data source: halooglasi.com — scraped on a schedule. Not affiliated with Halo Oglasi or Belgrade Waterfront.
+  </footer>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
