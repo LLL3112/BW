@@ -1,0 +1,15 @@
+{
+ "today": "2026-07-23",
+ "compared_to_yesterday": null,
+ "compared_to_week_ago": null,
+ "new_today": [],
+ "removed_vs_7d": [],
+ "daily_new_counts": [
+  {
+   "date": "2026-07-23",
+   "total_active": 0,
+   "new_count": null,
+   "removed_count": null
+  }
+ ]
+}
