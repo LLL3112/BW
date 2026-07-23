@@ -8,11 +8,12 @@ committed JSON snapshots.
 
 ## Live dashboard
 
-Once GitHub Pages is enabled for this repo (Settings → Pages → Source:
-**GitHub Actions** — one-time manual step, can't be set from a workflow),
-the `scrape.yml` workflow publishes `docs/` there automatically after every
-scrape. Until the first successful scheduled run lands, the dashboard shows
-an explicit "no data yet" state rather than fake numbers.
+GitHub Pages is configured as **Deploy from a branch**, pointed at this
+branch's `/docs` folder (Settings → Pages). With that source, GitHub
+publishes `docs/` automatically on every push — the `scrape.yml` workflow
+just needs to commit updated data there, which it does on each scheduled
+run. Until the first successful scheduled run lands, the dashboard shows an
+explicit "no data yet" state rather than fake numbers.
 
 To preview locally:
 ```

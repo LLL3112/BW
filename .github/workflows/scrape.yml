@@ -1,30 +1,20 @@
-name: Scrape Belgrade Waterfront listings & publish dashboard
+name: Scrape Belgrade Waterfront listings
+
+# GitHub Pages is configured as "Deploy from a branch" (docs/ folder), so
+# GitHub publishes the dashboard itself whenever this workflow pushes new
+# commits to docs/ — no separate Pages-deploy job needed here.
 
 on:
   schedule:
     - cron: '0 */6 * * *'
   workflow_dispatch: {}
-  push:
-    branches: [ main, claude/belgrade-waterfront-dashboard-bef3fc ]
-    paths:
-      - 'docs/index.html'
-      - 'docs/app.js'
-      - 'docs/style.css'
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
+  contents: write
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -50,27 +40,3 @@ jobs:
           git add docs/data/
           git diff --quiet && git diff --staged --quiet || git commit -m "Auto-update BW listings data - $(date -u +'%Y-%m-%d %H:%M UTC')"
           git push
-
-  deploy-pages:
-    needs: scrape
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Checkout repo (latest, including data just committed)
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
-
-      - name: Pull latest in case scrape job committed after checkout
-        run: git pull --ff-only
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
