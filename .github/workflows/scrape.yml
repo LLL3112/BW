@@ -1,12 +1,18 @@
 name: Scrape Belgrade Waterfront listings
 
-# GitHub Pages is configured as "Deploy from a branch" (docs/ folder), so
-# GitHub publishes the dashboard itself whenever this workflow pushes new
-# commits to docs/ — no separate Pages-deploy job needed here.
+# GitHub-hosted runners (ubuntu-latest) get an immediate HTTP 403 from
+# halooglasi.com on every request — a WAF/edge rule blocking well-known
+# cloud/datacenter IP ranges, confirmed in run 30047782928 (real Playwright
+# browser, still 403 with an empty body on the very first attempt of every
+# category). So this runs on a self-hosted runner instead (a normal browser
+# from a normal IP), started manually — see README for the one-time runner
+# setup + the "run a fresh scrape" steps.
+#
+# GitHub Pages is "Deploy from a branch" (docs/ folder), so GitHub publishes
+# the dashboard itself whenever this workflow pushes new commits to docs/ —
+# no separate Pages-deploy job needed here.
 
 on:
-  schedule:
-    - cron: '0 */6 * * *'
   workflow_dispatch: {}
 
 permissions:
@@ -14,7 +20,7 @@ permissions:
 
 jobs:
   scrape:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -28,12 +34,13 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Install Playwright's Chromium
-        run: playwright install --with-deps chromium
+        run: playwright install chromium
 
       - name: Run scraper
         run: python scraper.py
 
       - name: Commit and push data
+        shell: bash  # the self-hosted runner may be Windows, where run: steps default to PowerShell
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
