@@ -7,11 +7,16 @@ run produced a header-only file). A real headless browser executes the
 challenge JS like a normal visitor would.
 
 A real run from a residential/office IP (not a datacenter IP) still got
-blocked partway through — the first several requests succeeded and returned
-real listings, then everything started coming back HTTP 403. That points to
-rate-limiting on request volume/speed rather than a static IP block, which is
-why callers (scraper/run.py) pace requests with deliberate delays and trip a
-circuit breaker on repeated consecutive failures instead of retrying forever.
+blocked partway through — but the same machine's regular, manually-driven
+Chrome loads the site fine. Same IP, same network: the difference is
+automation fingerprinting, not IP reputation. So this launches the system's
+real installed Chrome (not Playwright's bundled test Chromium build) via
+`channel="chrome"`, non-headless, with the most common automation tells
+(navigator.webdriver, the AutomationControlled blink feature) suppressed —
+falling back to bundled headless Chromium if real Chrome isn't installed on
+whatever machine runs this. Callers (scraper/run.py) still pace requests
+with deliberate delays and trip a circuit breaker on repeated consecutive
+failures, since none of this is a license to hammer the site.
 """
 import logging
 import time
@@ -23,16 +28,26 @@ from . import config
 
 log = logging.getLogger("bw_scraper.browser")
 
+_STEALTH_INIT_SCRIPT = """
+Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+"""
+
 
 class BrowserFetcher:
     def __enter__(self):
         self._pw = sync_playwright().start()
-        self.browser = self._pw.chromium.launch(headless=True)
+        launch_args = ["--disable-blink-features=AutomationControlled"]
+        try:
+            self.browser = self._pw.chromium.launch(channel="chrome", headless=False, args=launch_args)
+            log.info("Launched the system's real Chrome (channel='chrome')")
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Real Chrome not available (%s) — falling back to bundled headless Chromium", exc)
+            self.browser = self._pw.chromium.launch(headless=True, args=launch_args)
         self.context = self.browser.new_context(
-            user_agent=config.HEADERS["User-Agent"],
             locale="sr-RS",
             viewport={"width": 1366, "height": 900},
         )
+        self.context.add_init_script(_STEALTH_INIT_SCRIPT)
         return self
 
     def __exit__(self, exc_type, exc, tb):
