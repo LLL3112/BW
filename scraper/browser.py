@@ -4,8 +4,14 @@ halooglasi.com sits behind Cloudflare bot-protection that frequently issues a
 JS challenge; a plain requests/cloudscraper session has historically come
 back empty from CI runners (see data/*.csv history in this repo — every past
 run produced a header-only file). A real headless browser executes the
-challenge JS like a normal visitor would, which is far more reliable from a
-datacenter IP such as a GitHub Actions runner.
+challenge JS like a normal visitor would.
+
+A real run from a residential/office IP (not a datacenter IP) still got
+blocked partway through — the first several requests succeeded and returned
+real listings, then everything started coming back HTTP 403. That points to
+rate-limiting on request volume/speed rather than a static IP block, which is
+why callers (scraper/run.py) pace requests with deliberate delays and trip a
+circuit breaker on repeated consecutive failures instead of retrying forever.
 """
 import logging
 import time
@@ -36,7 +42,10 @@ class BrowserFetcher:
         finally:
             self._pw.stop()
 
-    def get_html(self, url, *, wait_selector=None, max_retries=3, settle_ms=1500):
+    def get_html(self, url, *, wait_selector=None, max_retries=2, settle_ms=1500):
+        # Only 2 attempts (not 3): once a block/rate-limit is active, extra
+        # retries per URL just add more flagged requests without helping —
+        # better to let the caller's rate-limit guard see the failure sooner.
         last_exc = None
         for attempt in range(1, max_retries + 1):
             page = self.context.new_page()
@@ -53,7 +62,7 @@ class BrowserFetcher:
                 page.close()
                 if status and status >= 400:
                     log.warning("GET %s -> HTTP %s (attempt %d/%d)", url, status, attempt, max_retries)
-                    time.sleep(3 * attempt)
+                    time.sleep(8 * attempt)
                     continue
                 return html, status
             except Exception as exc:  # noqa: BLE001
@@ -63,7 +72,7 @@ class BrowserFetcher:
                     page.close()
                 except Exception:  # noqa: BLE001
                     pass
-                time.sleep(2 * attempt)
+                time.sleep(4 * attempt)
         if last_exc:
             raise last_exc
         return "", None

@@ -4,6 +4,8 @@ import datetime as dt
 import json
 import logging
 import os
+import random
+import time
 
 from . import config, enrich, export, history
 from .browser import BrowserFetcher
@@ -13,7 +15,32 @@ from .parse_list import extract_detail_urls
 log = logging.getLogger("bw_scraper.run")
 
 
-def crawl_category(fetcher, path, ad_type):
+class RateLimitTripped(Exception):
+    """Raised when too many consecutive fetches came back blocked."""
+
+
+class RateLimitGuard:
+    def __init__(self, max_consecutive=config.MAX_CONSECUTIVE_FAILURES):
+        self.consecutive = 0
+        self.max_consecutive = max_consecutive
+
+    def record(self, ok):
+        if ok:
+            self.consecutive = 0
+        else:
+            self.consecutive += 1
+            if self.consecutive >= self.max_consecutive:
+                raise RateLimitTripped(
+                    f"{self.consecutive} consecutive failed fetches — "
+                    "halooglasi looks to be rate-limiting/blocking this run, stopping early"
+                )
+
+
+def _pace(base_seconds):
+    time.sleep(random.uniform(base_seconds * 0.7, base_seconds * 1.3))
+
+
+def crawl_category(fetcher, path, ad_type, guard):
     urls = set()
     page = 1
     while page <= config.MAX_PAGES_PER_CATEGORY:
@@ -21,6 +48,7 @@ def crawl_category(fetcher, path, ad_type):
         html, status = fetcher.get_html(url, wait_selector=".product-item, [class*='product-list']")
         found = extract_detail_urls(html)
         log.info("[%s] page %d -> HTTP %s, %d links", path, page, status, len(found))
+        guard.record(ok=(status == 200))
         if not found:
             if page == 1:
                 log.warning("No listing links found on first page of %s — dumping a snippet for debugging", path)
@@ -33,39 +61,49 @@ def crawl_category(fetcher, path, ad_type):
             break
         urls |= new_links
         page += 1
+        _pace(config.SLEEP_BETWEEN_REQUESTS)
     return urls
 
 
 def scrape_all(max_details=None):
     scraped_at = dt.datetime.now(dt.timezone.utc).isoformat()
     all_detail_urls = {}  # url -> ad_type
+    listings = []
+    guard = RateLimitGuard()
 
     with BrowserFetcher() as fetcher:
-        for ad_type, paths in config.CATEGORIES.items():
-            for path in paths:
-                log.info("Crawling category %s (%s)", path, ad_type)
-                urls = crawl_category(fetcher, path, ad_type)
-                for u in urls:
-                    all_detail_urls[u] = ad_type
+        try:
+            for ad_type, paths in config.CATEGORIES.items():
+                for path in paths:
+                    log.info("Crawling category %s (%s)", path, ad_type)
+                    urls = crawl_category(fetcher, path, ad_type, guard)
+                    for u in urls:
+                        all_detail_urls[u] = ad_type
+                    _pace(config.SLEEP_BETWEEN_REQUESTS)
 
-        log.info("Total unique detail URLs to fetch: %d", len(all_detail_urls))
-        items = list(all_detail_urls.items())
-        if max_details:
-            items = items[:max_details]
+            log.info("Total unique detail URLs to fetch: %d", len(all_detail_urls))
+            items = list(all_detail_urls.items())
+            if max_details:
+                items = items[:max_details]
 
-        listings = []
-        for i, (url, ad_type) in enumerate(items, 1):
-            try:
-                html, status = fetcher.get_html(url, wait_selector="h1")
-                if status and status >= 400:
-                    log.warning("Skipping %s (HTTP %s)", url, status)
-                    continue
-                record = parse_detail_page(html, url, ad_type, scraped_at)
-                listings.append(record)
-            except Exception as exc:  # noqa: BLE001
-                log.error("Failed to parse %s: %s", url, exc)
-            if i % 10 == 0:
-                log.info("Parsed %d/%d detail pages", i, len(items))
+            for i, (url, ad_type) in enumerate(items, 1):
+                try:
+                    html, status = fetcher.get_html(url, wait_selector="h1")
+                    guard.record(ok=(status == 200))
+                    if status and status >= 400:
+                        log.warning("Skipping %s (HTTP %s)", url, status)
+                        continue
+                    record = parse_detail_page(html, url, ad_type, scraped_at)
+                    listings.append(record)
+                except RateLimitTripped:
+                    raise
+                except Exception as exc:  # noqa: BLE001
+                    log.error("Failed to parse %s: %s", url, exc)
+                if i % 10 == 0:
+                    log.info("Parsed %d/%d detail pages", i, len(items))
+                _pace(config.DETAIL_FETCH_SLEEP)
+        except RateLimitTripped as exc:
+            log.error("%s — saving %d listings collected so far", exc, len(listings))
 
     return listings
 

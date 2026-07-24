@@ -25,8 +25,20 @@ CATEGORIES = {
 
 MAX_PAGES_PER_CATEGORY = 40  # safety cap; loop stops earlier when a page has no cards
 REQUEST_TIMEOUT = 30
-SLEEP_BETWEEN_REQUESTS = 1.5  # be polite / reduce chance of being rate-limited
-DETAIL_FETCH_SLEEP = 1.0
+
+# Belgrade Waterfront is a small micro-location (a few dozen listings total
+# across every category), so there is no need to hurry: pace requests slowly
+# to avoid tripping rate-based anti-bot rules. A real run confirmed the site
+# lets an initial handful of requests through fine and then starts 403-ing
+# everything once traffic looks automated/fast — these values (plus jitter
+# applied at the call site) are deliberately conservative.
+SLEEP_BETWEEN_REQUESTS = 6.0
+DETAIL_FETCH_SLEEP = 5.0
+
+# If this many fetches in a row come back blocked, stop the run early rather
+# than continuing to hammer a WAF that has already started blocking us —
+# better to save partial results than escalate a temporary rate-limit.
+MAX_CONSECUTIVE_FAILURES = 6
 
 # Text used to hard-filter listings that leak in from outside Beograd na vodi
 # despite the scoped URL (e.g. cross-posted or mis-tagged ads). A listing is
