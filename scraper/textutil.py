@@ -72,6 +72,28 @@ FLOOR_WORDS = {
     "potkrovlje": 99,  # sentinel, resolved relative to total_floors by caller if needed
 }
 
+_ROMAN_VALUES = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
+
+
+def _roman_to_int(text):
+    """halooglasi reports the floor field in Roman numerals (e.g. "VII/15")."""
+    s = (text or "").strip().upper()
+    if not s or any(ch not in _ROMAN_VALUES for ch in s):
+        return None
+    total, prev = 0, 0
+    for ch in reversed(s):
+        val = _ROMAN_VALUES[ch]
+        total += -val if val < prev else val
+        prev = max(prev, val)
+    return total
+
+
+def _parse_floor_token(token):
+    token = token.strip()
+    if re.fullmatch(r"-?\d+", token):
+        return int(token)
+    return _roman_to_int(token)
+
 
 def parse_floor(text):
     """Returns (floor_numeric, total_floors) best-effort from a raw floor string."""
@@ -79,13 +101,19 @@ def parse_floor(text):
         return None, None
     t = clean_text(text)
     tf = fold(t)
-    m = re.search(r"(-?\d+)\s*/\s*(\d+)", t)
+    m = re.search(r"([IVXLCDM]+|-?\d+)\s*/\s*([IVXLCDM]+|\d+)", t, re.IGNORECASE)
     if m:
-        return int(m.group(1)), int(m.group(2))
+        cur = _parse_floor_token(m.group(1))
+        tot = _parse_floor_token(m.group(2))
+        if cur is not None:
+            return cur, tot
     for word, val in FLOOR_WORDS.items():
         if word in tf:
             return val, None
     m = re.search(r"-?\d+", t)
     if m:
         return int(m.group(0)), None
+    roman = _roman_to_int(t)
+    if roman is not None:
+        return roman, None
     return None, None

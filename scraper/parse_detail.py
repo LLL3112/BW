@@ -24,8 +24,11 @@ log = logging.getLogger("bw_scraper.parse_detail")
 LABEL_MAP = {
     "size_sqm": ["kvadratura", "povrsina", "korisna povrsina", "m2"],
     "rooms_raw": ["broj soba", "sobnost"],
-    "floor_raw": ["sprat"],
-    "total_floors": ["spratnost", "spratnost objekta", "ukupno spratova"],
+    # Real data confirms halooglasi's bare "Spratnost" field IS the floor
+    # descriptor (e.g. "VII/15" = 7th of 15 floors, in Roman numerals), not
+    # a separate total-floor-count field — "sprat" kept as an alt phrasing.
+    "floor_raw": ["spratnost", "sprat"],
+    "total_floors": ["spratnost objekta", "ukupno spratova"],
     "heating": ["grejanje"],
     "year_built": ["godina izgradnje"],
     "condition": ["stanje objekta", "uknjizenost", "stanje nekretnine"],
@@ -103,6 +106,29 @@ def extract_label_value_pairs(soup):
     return pairs
 
 
+def unswap_value_label_pairs(pairs):
+    """Fix a real markup pattern found on halooglasi's stat-chip elements.
+
+    They render as <value><label> in DOM order with the label nested inside
+    the value's container (e.g. text "32,06 m2" then "Kvadratura" inside one
+    parent), which the generic span-pair scan above picks up backwards: the
+    assumed "value" ends up being the bare label word itself, and the
+    assumed "label" is that word glued onto the real value with no
+    separator ("32,06 m2Kvadratura" -> "Kvadratura"). Detect that exact
+    shape and swap it back — confirmed against real scraped output where
+    size/rooms/floor all came through reversed this way.
+    """
+    fixed = {}
+    for k, v in pairs.items():
+        if _match_label(fold(v)) and k.endswith(v) and len(k) > len(v):
+            real_value = clean_text(k[: len(k) - len(v)])
+            if real_value:
+                fixed.setdefault(v, real_value)
+                continue
+        fixed.setdefault(k, v)
+    return fixed
+
+
 def map_pairs_to_fields(pairs):
     out = {}
     for label, value in pairs.items():
@@ -140,15 +166,35 @@ def extract_images(soup):
     return sorted(urls)
 
 
+# Sitewide UI hint text that a naive "[class*='description']" match picked
+# up instead of the actual ad text on every single listing in a real run —
+# explicitly excluded so a wrong-but-plausible-looking match doesn't win.
+_GENERIC_UI_TEXT_MARKERS = [
+    "u pretrazi sajta mozete zeljene oglase",
+]
+
+
+def _looks_generic(text):
+    tf = fold(text)
+    return any(marker in tf for marker in _GENERIC_UI_TEXT_MARKERS)
+
+
 def extract_description(soup):
-    for sel in ["[class*='description']", "[class*='opis']", "#TextAreaComment", "[itemprop='description']"]:
-        el = soup.select_one(sel)
-        if el:
+    for sel in [
+        "[class*='description']", "[class*='opis']", "#TextAreaComment", "[itemprop='description']",
+        "[class*='OglasDetail'] [class*='Text']", "[data-testid*='description']",
+        ".classified-content [class*='text']", "#oglas-opis",
+    ]:
+        for el in soup.select(sel):
             text = clean_text(el.get_text(" "))
-            if len(text) > 20:
+            if len(text) > 20 and not _looks_generic(text):
                 return text
     meta = soup.select_one("meta[name='description']")
-    return clean_text(meta.get("content")) if meta else ""
+    if meta:
+        text = clean_text(meta.get("content"))
+        if text and not _looks_generic(text):
+            return text
+    return ""
 
 
 def extract_title(soup):
@@ -170,14 +216,33 @@ def extract_price_raw(soup, full_text):
     return m.group(0) if m else ""
 
 
-def extract_agency_and_owner(soup, full_text, mapped_agency_raw=None):
+_AGENCY_LINK_HREF_RE = re.compile(r"/(prodavac|agencije|agencija|kompanija|oglasivac|pumk)/", re.IGNORECASE)
+
+
+def extract_agency_and_owner(soup, full_text, mapped_agency_raw=None, ld=None):
     """Returns (agency_name, is_owner)."""
     folded = fold(full_text)
     owner_markers = ["vlasnik nekretnine", "oglasivac: vlasnik", "vrsta oglasivaca: vlasnik"]
     is_owner = any(m in folded for m in owner_markers)
 
-    agency_el = soup.select_one("[class*='agency-name'], [class*='oglasivac'] a, .company-name, [class*='seller-name']")
+    agency_el = soup.select_one(
+        "[class*='agency-name'], [class*='oglasivac'] a, .company-name, [class*='seller-name'], "
+        "[class*='AgencyName'], [class*='CompanyName'], [class*='advertiser'] a, "
+        "[data-testid*='agency'], [data-testid*='seller']"
+    )
     agency_name = clean_text(agency_el.get_text()) if agency_el else None
+
+    if not agency_name:
+        link = soup.find("a", href=_AGENCY_LINK_HREF_RE)
+        if link:
+            agency_name = clean_text(link.get_text()) or None
+
+    if not agency_name and ld:
+        for key in ("seller", "provider", "author"):
+            party = ld.get(key)
+            if isinstance(party, dict) and party.get("name"):
+                agency_name = clean_text(party["name"])
+                break
 
     logo = soup.select_one("[class*='agency'] img, [class*='oglasivac'] img")
     if logo and not agency_name:
@@ -256,9 +321,17 @@ def extract_listing_id_from_url(url):
 
 
 def parse_rooms_category(rooms_raw, title):
+    # halooglasi's "Broj soba" field is already the bare category number
+    # (0.5=studio, 1.0, 1.5, 2.0, ...) once extracted correctly — trust it
+    # directly rather than re-deriving from Serbian wording when possible.
+    if rooms_raw:
+        rr = rooms_raw.strip().replace(",", ".")
+        if re.fullmatch(r"\d+(?:\.\d+)?", rr):
+            return f"{float(rr):.1f}"
+
     text = fold((rooms_raw or "") + " " + (title or ""))
     mapping = [
-        ("garsonjer", "0.0"),
+        ("garsonjer", "0.5"),
         ("jednoiposoban", "1.5"),
         ("jednosoban", "1.0"),
         ("dvoiposoban", "2.5"),
@@ -279,6 +352,7 @@ def parse_rooms_category(rooms_raw, title):
 
 LAYOUT_LABELS = {
     "0.0": "Studio",
+    "0.5": "Studio",
     "1.0": "1-Bedroom",
     "1.5": "1.5-Bedroom",
     "2.0": "2-Bedroom",
@@ -295,6 +369,7 @@ def parse_detail_page(html, url, ad_type, scraped_at):
     full_text = soup.get_text(" ", strip=True)
 
     pairs = extract_label_value_pairs(soup)
+    pairs = unswap_value_label_pairs(pairs)
     mapped = map_pairs_to_fields(pairs)
     ld = extract_json_ld(soup) or {}
 
@@ -318,7 +393,7 @@ def parse_detail_page(html, url, ad_type, scraped_at):
     if not price_per_sqm and price_eur and size_sqm:
         price_per_sqm = round(price_eur / size_sqm, 2)
 
-    agency_name, is_owner = extract_agency_and_owner(soup, full_text, mapped.get("agency_name_raw"))
+    agency_name, is_owner = extract_agency_and_owner(soup, full_text, mapped.get("agency_name_raw"), ld)
     building = detect_building(title, description, address, mapped.get("building_raw"))
     section = detect_section(address, building)
     off_plan = detect_off_plan(full_text)

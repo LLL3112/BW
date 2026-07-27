@@ -60,9 +60,40 @@ BW_INCLUDE_MARKERS = [
 # "building/complex" field, or the address); this list is only a secondary
 # regex-matching aid for titles/descriptions that name a building without it
 # being captured as a structured field. Extend freely as new towers launch.
+#
+# Populated from real scraped titles (run 30249766457, 556 sale listings) —
+# almost every real BW building name follows "BW <Name>" in the title, so
+# this list was built from actual "BW X" frequency counts rather than guesses.
 KNOWN_BUILDINGS = [
     "Kula Beograd",
     "BW Marina",
+    "BW Perla",
+    "BW Riviera",
+    "BW Kings",
+    "BW Victoria",
+    "BW Sena",
+    "BW Quartet",
+    "BW Metropolitan",
+    "BW Vista",
+    "BW Hudson",
+    "BW Iris",
+    "BW Garden",
+    "BW Lena",
+    "BW Eden",
+    "BW Nika",
+    "BW Simfonija",
+    "BW Topaz",
+    "BW Terraces",
+    "BW Aria",
+    "BW Lumia",
+    "BW Riva",
+    "BW Iskra",
+    "BW Thalia",
+    "BW Aurora",
+    "BW Libera",
+    "BW Aqua",
+    "BW Scala",
+    "Alegra",
     "Marina Towers",
     "Belgrade Tower",
     "Sava Residences",
