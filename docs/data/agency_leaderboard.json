@@ -1,1 +1,32 @@
-{}
+{
+ "Unspecified": [
+  {
+   "agency": "Unknown",
+   "count": 487
+  }
+ ],
+ "BW Marina": [
+  {
+   "agency": "Unknown",
+   "count": 4
+  }
+ ],
+ "Kula Beograd": [
+  {
+   "agency": "Unknown",
+   "count": 7
+  }
+ ],
+ "BW Residence": [
+  {
+   "agency": "Unknown",
+   "count": 21
+  }
+ ],
+ "Sava Residences": [
+  {
+   "agency": "Unknown",
+   "count": 4
+  }
+ ]
+}
